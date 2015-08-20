@@ -2,7 +2,7 @@
   "name": "pair-pressure",
   "main": "./lib/atom_pair",
   "version": "0.1.1",
-  "description": "An Atom Package that allows for epic pair programming, powered by Pusher and Udacity",
+  "description": "An Atom Package that allows for epic pair programming, powered by Pusher",
   "repository": "https://github.com/hendrixer/pair-pressure",
   "license": "MIT",
   "engines": {
