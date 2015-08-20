@@ -89,16 +89,6 @@ module.exports = AtomPair =
     @markerColour = null
 
   joinSession: ->
-    @globalChannel.bind 'puhser:pair-declined', =>
-      decline = new DeclineView
-
-      setTimeout(=>
-        decline.hide('slow');
-      , 3000)
-
-    @globalChannel.bind 'pusher:pair-accepted', =>
-      @pairingSetup()
-
     if @markerColour
       atom.notifications.addError "It looks like you are already in a pairing session. Please open a new window (cmd+shift+N) to start/join a new one."
       return
@@ -111,6 +101,7 @@ module.exports = AtomPair =
       keys = @sessionId.split("-")
       [@app_key, @app_secret] = [keys[0], keys[1]]
       joinView.panel.hide()
+      @connectToPusher()
       @queue.add(@globalChannel.name, 'pusher:user_asking_to_join', {})
 
   generateSessionId: ->
@@ -128,18 +119,17 @@ module.exports = AtomPair =
       fn(editor)
 
   pairingSetup: ->
-    @connectToPusher()
     @synchronizeColours()
     @subscriptions.add atom.commands.add 'atom-workspace', 'PairPressure:disconnect': => @disconnect()
 
   connectToPusher: ->
-    if not @queue
-      @pusher = new Pusher @app_key,
-        authTransport: 'client'
-        clientAuth:
-          key: @app_key
-          secret: @app_secret
-          user_id: @markerColour || "blank"
+
+    @pusher = new Pusher @app_key,
+      authTransport: 'client'
+      clientAuth:
+        key: @app_key
+        secret: @app_secret
+        user_id: @markerColour || "blank"
 
       @queue = new MessageQueue(@pusher)
 
@@ -160,6 +150,9 @@ module.exports = AtomPair =
     prompt.on 'click', 'button.yes', =>
       @queue.add @globalChannel.name, 'pusher:pair-accepted'
       prompt.hide 'slow'
+
+    @globalChannel.bind 'pusher:pair-accepted', =>
+      @pairingSetup()
 
   synchronizeColours: ->
     @globalChannel.bind 'pusher:subscription_succeeded', (members) =>
