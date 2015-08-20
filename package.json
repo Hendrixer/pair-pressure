@@ -1,9 +1,9 @@
 {
-  "name": "atom-pair",
+  "name": "pair-pressure",
   "main": "./lib/atom_pair",
-  "version": "2.0.5",
+  "version": "0.0.1",
   "description": "An Atom Package that allows for epic pair programming, powered by Pusher",
-  "repository": "https://github.com/pusher/atom-pair",
+  "repository": "https://github.com/hendrixer/pair-pressure",
   "license": "MIT",
   "engines": {
     "atom": ">0.50.0"

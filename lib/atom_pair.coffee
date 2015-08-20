@@ -1,5 +1,7 @@
 InputView = null
 SharePane = null
+PromptView = null
+DeclineView = null
 
 require './pusher/pusher'
 require './pusher/pusher-js-client-auth'
@@ -51,6 +53,10 @@ module.exports = AtomPair =
 
     InputView = require './views/input-view'
 
+    PromptView = require './views/prompt-view'
+
+    DeclineView = require './views/decline-view'
+
     randomstring = require 'randomstring'
     _ = require 'underscore'
 
@@ -65,10 +71,10 @@ module.exports = AtomPair =
     @subscriptions = new CompositeDisposable
 
     # Register command that toggles this view
-    @subscriptions.add atom.commands.add 'atom-workspace', 'AtomPair:start new pairing session': => new Invitation(@)
-    @subscriptions.add atom.commands.add 'atom-workspace', 'AtomPair:invite over hipchat': => new HipChatInvitation(@)
-    @subscriptions.add atom.commands.add 'atom-workspace', 'AtomPair:invite over slack': => new SlackInvitation(@)
-    @subscriptions.add atom.commands.add 'atom-workspace', 'AtomPair:join pairing session': => @joinSession()
+    @subscriptions.add atom.commands.add 'atom-workspace', 'PairPressure:start new pairing session': => new Invitation(@)
+    @subscriptions.add atom.commands.add 'atom-workspace', 'PairPressure:invite over hipchat': => new HipChatInvitation(@)
+    @subscriptions.add atom.commands.add 'atom-workspace', 'PairPressure:invite over slack': => new SlackInvitation(@)
+    @subscriptions.add atom.commands.add 'atom-workspace', 'PairPressure:join pairing session': => @joinSession()
 
     @colours = require('./helpers/colour-list')
     @friendColours = []
@@ -83,6 +89,15 @@ module.exports = AtomPair =
     @markerColour = null
 
   joinSession: ->
+    @globalChannel.bind 'puhser:pair-declined', =>
+      decline = new DeclineView
+
+      setTimeout(=>
+        decline.hide('slow');
+      , 3000)
+
+    @globalChannel.bind 'pusher:pair-accepted', =>
+      @pairingSetup()
 
     if @markerColour
       atom.notifications.addError "It looks like you are already in a pairing session. Please open a new window (cmd+shift+N) to start/join a new one."
@@ -96,7 +111,7 @@ module.exports = AtomPair =
       keys = @sessionId.split("-")
       [@app_key, @app_secret] = [keys[0], keys[1]]
       joinView.panel.hide()
-      @pairingSetup()
+      @queue.add(@globalChannel.name, 'pusher:user_asking_to_join', {})
 
   generateSessionId: ->
     @sessionId = "#{@app_key}-#{@app_secret}-#{randomstring.generate(11)}"
@@ -115,19 +130,36 @@ module.exports = AtomPair =
   pairingSetup: ->
     @connectToPusher()
     @synchronizeColours()
-    @subscriptions.add atom.commands.add 'atom-workspace', 'AtomPair:disconnect': => @disconnect()
+    @subscriptions.add atom.commands.add 'atom-workspace', 'PairPressure:disconnect': => @disconnect()
 
   connectToPusher: ->
-    @pusher = new Pusher @app_key,
-      authTransport: 'client'
-      clientAuth:
-        key: @app_key
-        secret: @app_secret
-        user_id: @markerColour || "blank"
+    if not @queue
+      @pusher = new Pusher @app_key,
+        authTransport: 'client'
+        clientAuth:
+          key: @app_key
+          secret: @app_secret
+          user_id: @markerColour || "blank"
 
-    @queue = new MessageQueue(@pusher)
+      @queue = new MessageQueue(@pusher)
 
-    @globalChannel = @pusher.subscribe("presence-session-#{@sessionId}")
+      @globalChannel = @pusher.subscribe("presence-session-#{@sessionId}")
+      # scott
+      @globalChannel.bind 'pusher:user_asking_to_join', @showPrompt
+
+  # scott
+  showPrompt: (user) ->
+    user = name: 'scott'
+    prompt = new PromptView
+    prompt.showUser user
+
+    prompt.on 'click', 'button.nope', =>
+      @queue.add @globalChannel.name, 'pusher:pair-declined'
+      prompt.hide 'slow'
+
+    prompt.on 'click', 'button.yes', =>
+      @queue.add @globalChannel.name, 'pusher:pair-accepted'
+      prompt.hide 'slow'
 
   synchronizeColours: ->
     @globalChannel.bind 'pusher:subscription_succeeded', (members) =>
@@ -135,6 +167,7 @@ module.exports = AtomPair =
       return @resubscribe() unless @markerColour
       colours = Object.keys(members.members)
       @friendColours = _.without(colours, @markerColour)
+      # here scott
       _.each @friendColours, (colour) -> SharePane.each (pane) -> pane.addMarker 0, colour
       @startPairing()
 
